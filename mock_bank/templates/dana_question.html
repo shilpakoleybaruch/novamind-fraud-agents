@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Alert</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #f7f8fa;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 16px 48px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px 24px 32px;
+    max-width: 400px;
+    width: 100%;
+    border: 1px solid #e5e7eb;
+  }
+
+  .verified-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #1a7f37;
+    background: #d1fae5;
+    border-radius: 4px;
+    padding: 3px 8px;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+
+  h1 {
+    font-size: 1.25rem;
+    color: #1f2328;
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+    color: #57606a;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .detail-block {
+    background: #f7f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.875rem;
+    padding: 5px 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .detail-row:last-child { border-bottom: none; }
+
+  .detail-label { color: #57606a; }
+  .detail-value { color: #1f2328; font-weight: 600; text-align: right; max-width: 60%; }
+
+  .reason-box {
+    font-size: 0.875rem;
+    color: #444;
+    line-height: 1.6;
+    margin-bottom: 28px;
+    padding: 14px 16px;
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .question {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2328;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+
+  .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  button {
+    width: 100%;
+    padding: 16px;
+    border-radius: 10px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  button:active { opacity: 0.85; }
+
+  .btn-me {
+    background: #1a7f37;
+    color: #fff;
+  }
+
+  .btn-not-me {
+    background: #fff;
+    color: #cf222e;
+    border: 2px solid #cf222e;
+  }
+
+  .footer {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.75rem;
+    color: #57606a;
+    line-height: 1.5;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="verified-badge">Verified in-app</span>
+
+  <h1>We spotted an unusual charge</h1>
+  <p class="subtitle">We need your help to confirm this payment before it goes through.</p>
+
+  <div class="detail-block">
+    <div class="detail-row">
+      <span class="detail-label">Merchant</span>
+      <span class="detail-value">{{merchant_name}}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Amount</span>
+      <span class="detail-value">{{amount}}</span>
+    </div>
+  </div>
+
+  <div class="reason-box">{{plain_reason}}</div>
+
+  <p class="question">Did you make this payment?</p>
+
+  <form method="POST" action="/app/question/{{question_id}}?t={{page_token}}" class="btn-group">
+    <button type="submit" name="reply" value="me" class="btn-me">
+      That was me
+    </button>
+    <button type="submit" name="reply" value="not_me" class="btn-not-me">
+      Not me — stop this charge
+    </button>
+  </form>
+
+  <div class="footer">
+    No links. Open your app to check any alert.<br>
+    Your essential supplier payments and rent transfer are not affected.
+  </div>
+</div>
+</body>
+</html>

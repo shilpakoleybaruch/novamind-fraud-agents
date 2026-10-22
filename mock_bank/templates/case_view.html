@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Case {{case_id}}</title>
+<!-- Auto-refresh every 5 seconds -->
+<meta http-equiv="refresh" content="5">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #f7f8fa;
+    min-height: 100vh;
+    padding: 24px 16px 48px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .wrapper {
+    max-width: 540px;
+    width: 100%;
+  }
+
+  .header {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .case-id {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #57606a;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: 1.2rem;
+    color: #1f2328;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+
+  .status-pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 14px;
+  }
+  .status-open           { background: #dbeafe; color: #1d4ed8; }
+  .status-analyst-queued { background: #fef3c7; color: #92400e; }
+  .status-resolved       { background: #d1fae5; color: #065f46; }
+  .status-escalated      { background: #fee2e2; color: #991b1b; }
+
+  .what-next {
+    font-size: 0.875rem;
+    color: #444;
+    line-height: 1.6;
+    padding: 14px 16px;
+    background: #f0f9ff;
+    border-left: 3px solid #3b82d4;
+    border-radius: 0 8px 8px 0;
+    margin-top: 14px;
+  }
+
+  .updated {
+    font-size: 0.72rem;
+    color: #57606a;
+    margin-top: 10px;
+    text-align: right;
+  }
+
+  /* Timeline */
+  .section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #57606a;
+    margin-bottom: 12px;
+    padding-left: 4px;
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .step {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+
+  .step-time {
+    font-size: 0.7rem;
+    color: #57606a;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    margin-bottom: 4px;
+  }
+
+  .step-actor {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #7c5cd8;
+    margin-bottom: 2px;
+  }
+
+  .step-action {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1f2328;
+    margin-bottom: 4px;
+  }
+
+  .step-reason {
+    font-size: 0.82rem;
+    color: #57606a;
+    line-height: 1.5;
+  }
+
+  .footer {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.72rem;
+    color: #57606a;
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <p class="case-id">Case {{case_id}}</p>
+    <h1>{{summary}}</h1>
+
+    <span class="status-pill status-{{case_status_css}}">{{case_status}}</span>
+
+    <div class="what-next">
+      <strong>What happens next:</strong><br>
+      {{what_next}}
+    </div>
+
+    <p class="updated">Last updated {{updated_at}} &bull; refreshes every 5 s</p>
+  </div>
+
+  <p class="section-title">Activity timeline</p>
+  <div class="timeline">
+    {{timeline}}
+  </div>
+
+  <div class="footer">
+    This page is for authorised review only. Do not share the URL.
+  </div>
+</div>
+</body>
+</html>

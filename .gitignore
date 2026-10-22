@@ -1,0 +1,10 @@
+# secrets and local data
+.env
+*.db
+*.sqlite
+
+# python caches
+__pycache__/
+.pytest_cache/
+.venv/
+.DS_Store

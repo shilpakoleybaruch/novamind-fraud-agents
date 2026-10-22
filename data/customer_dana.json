@@ -1,0 +1,51 @@
+{
+  "customer_id": "C-DANA-001",
+  "name": "Dana Reyes",
+  "age": 38,
+  "occupation": "Sole-proprietor shop owner",
+  "accounts": [
+    {
+      "account_id": "ACC-DANA-CHQ-001",
+      "type": "business_current",
+      "currency": "USD",
+      "cards": [
+        {
+          "card_id": "CARD-DANA-001",
+          "scheme": "Visa",
+          "status": "active"
+        }
+      ]
+    }
+  ],
+  "essential_payees": [
+    {
+      "payee_id": "EP-001",
+      "name": "NorthSide Supply",
+      "type": "supplier",
+      "channel": "transfer",
+      "typical_day": "friday",
+      "typical_amount_range": [
+        800,
+        1400
+      ],
+      "notes": "Weekly supplier transfer, every Friday"
+    },
+    {
+      "payee_id": "EP-002",
+      "name": "Greenway Properties",
+      "type": "landlord",
+      "channel": "transfer",
+      "typical_day_of_month": 1,
+      "typical_amount_range": [
+        2200,
+        2200
+      ],
+      "notes": "Monthly rent transfer on the 1st"
+    }
+  ],
+  "contact": {
+    "in_app_messaging": true,
+    "push_notifications": true,
+    "preferred_channel": "in_app"
+  }
+}
