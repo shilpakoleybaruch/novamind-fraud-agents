@@ -74,11 +74,11 @@ instructions: |
   Finish with a short JSON summary: {txn_id, score, level, branch, decision_ids,
   case_id, hold_id, customer_message, reason}.
 
-llm: watsonx/ibm/granite-3-3-8b-instruct
+llm: watsonx/ibm/granite-4-h-small
 
 llm_config:
   temperature: 0.0
-  max_tokens: 1024
+  max_tokens: 2048
 
 tools:
   - get_score_context

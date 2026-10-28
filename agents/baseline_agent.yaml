@@ -46,11 +46,11 @@ instructions: |
   you were given. If the tool refuses because the answer wasn't verified,
   report that refusal unchanged.
 
-llm: watsonx/ibm/granite-3-3-8b-instruct
+llm: watsonx/ibm/granite-4-h-small
 
 llm_config:
   temperature: 0.0
-  max_tokens: 512
+  max_tokens: 2048
 
 tools:
   - get_transaction_history

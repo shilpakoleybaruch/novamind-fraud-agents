@@ -48,11 +48,11 @@ instructions: |
 
   Return only JSON: {ok, action, hold_id, case_id, refusal_reason}.
 
-llm: watsonx/ibm/granite-3-3-8b-instruct
+llm: watsonx/ibm/granite-4-h-small
 
 llm_config:
   temperature: 0.0
-  max_tokens: 512
+  max_tokens: 2048
 
 tools:
   - place_partial_hold
