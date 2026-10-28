@@ -1,33 +1,10 @@
-# Orchestrate connection spec — Novamind mock bank API
-# Import with:
-#   orchestrate connections import --file connections/mock_bank.yaml
-# Then set credentials:
-#   orchestrate connections set-credentials --app-id novamind_mock_bank
-#
-# NEVER commit real values for MOCK_BANK_URL or MOCK_BANK_API_KEY.
-# Use the set-credentials command (prompts interactively) or pass --from-file.
-
+spec_version: v1
+kind: connection
 app_id: novamind_mock_bank
-name: Novamind Mock Bank
-description: >
-  HTTP connection to the Novamind mock bank API deployed on IBM Cloud Code Engine.
-  Provides the base URL and API key used by all four Novamind agent tool files.
-
-connection_type: key_value
-
-environment: mycloud
-
-key_value_pairs:
-  - key: MOCK_BANK_URL
-    description: >
-      Base URL of the mock bank API, e.g.
-      https://mock-bank.<your-ce-domain>
-      No trailing slash.
-    value: "PLACEHOLDER_SET_WITH_SET-CREDENTIALS"
-
-  - key: MOCK_BANK_API_KEY
-    description: >
-      API key for X-API-Key header authentication.
-      Must match MOCK_BANK_API_KEY configured on the server.
-    value: "PLACEHOLDER_SET_WITH_SET-CREDENTIALS"
-    secret: true
+environments:
+  draft:
+    kind: key_value
+    type: team
+  live:
+    kind: key_value
+    type: team
