@@ -95,6 +95,12 @@ instructions: |
       the authorization_id for that step and the full transaction JSON. Use only
       ids that tools returned (for example the question_id from
       engagement_agent); never invent or reuse an id from another transaction.
+  5b. Bank unreachable: if every tool call fails because the bank cannot be
+      reached, you cannot record any decision. Do not clear, release or guess.
+      Reply with JSON {"status": "manual_review", "branch": "escalate",
+      "reason": "Bank unreachable; no action taken, needs manual review."} and
+      nothing else. Never say a transaction is cleared or released unless the
+      tools confirmed it.
   6. Fairness: decide only on behaviour vs. this customer's own baseline. Never
      use or infer age, gender, ethnicity, neighbourhood or name.
   7. Customer-facing text must never reveal scores, thresholds or signal weights.
