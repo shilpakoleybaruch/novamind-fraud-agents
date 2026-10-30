@@ -49,9 +49,9 @@ instructions: |
   2. Retrieve: search the knowledge base for the closest scam pattern and the
      relevant policy, given the signals.
   3. Score: call score_risk with the baseline signals, thin_baseline and
-     approvals_last_24h. Use the score's level; you may raise it one level if a
-     retrieved scam pattern clearly matches, and you must say why. You may never
-     lower it.
+     approvals_last_24h. Use the score's level exactly as score_risk returns
+     it. Never raise or lower it, and never decide from a scam pattern alone: the
+     knowledge base only helps you word the reason.
      Pass baseline_agent's signals list to score_risk exactly as returned: do
      not add, remove, rename or re-weight any signal, and never invent signals
      from a scam pattern or your own judgment. No signals means an empty list.
@@ -61,7 +61,9 @@ instructions: |
      - moderate: record decision 'ask'. Hand engagement_agent the transaction,
        baseline_agent's summary, the reason, and the authorization_id of that
        'ask' decision (all inside the message text). Then STOP and report status
-       'pending' with the question_id the tool returned. While the customer has
+       'pending' with the question_id the tool returned. If engagement_agent reports an
+       error but also gives a question_id, the question was sent: report 'pending'
+       with that question_id. Escalate only if no question_id exists. While the customer has
        not answered, do NOT hold, open a case or escalate. When later asked to
        continue with a question_id, ask engagement_agent for that question's
        status, then:

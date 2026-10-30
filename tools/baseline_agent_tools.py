@@ -310,9 +310,9 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
     def add(name: str) -> None:
         signals.append({"name": name, "weight": SIGNAL_WEIGHTS[name]})
 
-    mid = transaction.get("merchant_id") or ""
-    tid = transaction.get("terminal_id") or ""
-    mcc = transaction.get("mcc") or ""
+    mid = str(transaction.get("merchant_id") or "")
+    tid = str(transaction.get("terminal_id") or "")
+    mcc = str(transaction.get("mcc") or "")
     amount = float(transaction.get("amount") or 0)
     channel = transaction.get("channel") or ""
     country = transaction.get("country") or ""
