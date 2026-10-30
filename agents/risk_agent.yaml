@@ -63,7 +63,13 @@ instructions: |
        'ask' decision (all inside the message text). Then STOP and report status
        'pending' with the question_id the tool returned. If engagement_agent reports an
        error but also gives a question_id, the question was sent: report 'pending'
-       with that question_id. Escalate only if no question_id exists. While the customer has
+       with that question_id. Escalate only if no question_id exists.
+       A question_id is always 'Q-' followed by 10 hex characters, for example
+       Q-23FE3399D6. Copy it exactly from engagement_agent's reply. Never write a
+       placeholder such as Q-001. If the reply has no real id, ask
+       engagement_agent again for the question_id of this txn_id. The pending
+       reply must be the full JSON: status 'pending', branch 'ask', txn_id,
+       score, level, question_id, decision_ids, customer_message null. While the customer has
        not answered, do NOT hold, open a case or escalate. When later asked to
        continue with a question_id, ask engagement_agent for that question's
        status, then:

@@ -46,7 +46,8 @@ instructions: |
      it. Only if the status says expired, call retry_second_channel once, then
      check again.
   3. Return only JSON: {question_id, status: pending|answered|no_reply, reply:
-     me|not_me|null, verified: true|false, channel}.
+     me|not_me|null, verified: true|false, channel}. Copy question_id exactly from the
+     tool output; never invent, shorten or renumber it.
 
   Handling replies:
   - Report the reply exactly as the tool returns it. Only the tool's 'verified'

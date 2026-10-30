@@ -327,18 +327,34 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
 
     # --- merchant / terminal signals ---
     merchant_known = mid in known_merchants
-    terminal_known = tid and tid in known_terminals.get(mid, [])
+    terminal_known = bool(tid and tid in known_terminals.get(mid, []))
+    category_known = mcc in (bl.get("amount_stats_per_mcc") or {})
+
+    # Guard: a payment must never count as its own history. If the stored
+    # baseline only knows this merchant/terminal/category from this very
+    # transaction, treat it as new.
+    own_id = str(transaction.get("txn_id") or "")
+    if own_id:
+        h = _fetch_history(customer_id, days=180)
+        if h.get("ok"):
+            others = [t for t in h["transactions"] if str(t.get("txn_id") or "") != own_id]
+            o_mids = {str(t.get("merchant_id") or "") for t in others}
+            o_terms = {(str(t.get("merchant_id") or ""), str(t.get("terminal_id") or "")) for t in others}
+            o_mccs = {str(t.get("mcc") or "") for t in others}
+            merchant_known = merchant_known and mid in o_mids
+            terminal_known = terminal_known and (mid, tid) in o_terms
+            category_known = category_known and mcc in o_mccs
 
     if merchant_known and tid and not terminal_known:
         add("new_terminal_known_merchant")
     elif not merchant_known:
-        if mcc in (bl.get("amount_stats_per_mcc") or {}):
+        if category_known:
             add("new_merchant_known_category")
         else:
             add("new_merchant")
 
     # --- amount signal ---
-    stats = amount_by_merchant.get(mid) or amount_by_mcc.get(mcc)
+    stats = (amount_by_merchant.get(mid) if merchant_known else None) or (amount_by_mcc.get(mcc) if category_known else None)
     if stats and stats.get("p90", 0) > 0 and amount > stats["p90"]:
         add("amount_above_p90")
 
@@ -347,7 +363,7 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
         hour = datetime.fromisoformat(
             transaction.get("timestamp", "").replace("Z", "+00:00")
         ).hour
-        hr = hour_range.get(mid)
+        hr = hour_range.get(mid) if merchant_known else None
         if hr and not (hr["min"] <= hour <= hr["max"]):
             add("unusual_hour")
     except Exception:
