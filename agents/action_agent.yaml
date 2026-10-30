@@ -48,7 +48,7 @@ instructions: |
 
   Return only JSON: {ok, action, hold_id, case_id, refusal_reason}.
 
-llm: watsonx/ibm/granite-4-h-small
+llm: groq/openai/gpt-oss-120b
 
 llm_config:
   temperature: 0.0

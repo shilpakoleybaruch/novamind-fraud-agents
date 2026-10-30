@@ -20,13 +20,28 @@ from typing import Optional
 import httpx
 from ibm_watsonx_orchestrate.agent_builder.tools import tool
 
+from ibm_watsonx_orchestrate.agent_builder.connections import ConnectionType
+from ibm_watsonx_orchestrate.run import connections
+
+_BANK_APP_ID = "novamind_mock_bank"
+_BANK_CREDS = [{"app_id": _BANK_APP_ID, "type": ConnectionType.KEY_VALUE}]
+
+
+def _bank_creds() -> tuple[str, str]:
+    """(url, key) from the Orchestrate connection; env vars for local runs."""
+    try:
+        c = connections.key_value(_BANK_APP_ID)
+        return c["MOCK_BANK_URL"], c["MOCK_BANK_API_KEY"]
+    except Exception:
+        return os.environ["MOCK_BANK_URL"], os.environ["MOCK_BANK_API_KEY"]
+
 # ---------------------------------------------------------------------------
 # Connection helpers
 # ---------------------------------------------------------------------------
 
 def _client() -> httpx.Client:
-    url = os.environ["MOCK_BANK_URL"].rstrip("/")
-    key = os.environ["MOCK_BANK_API_KEY"]
+    url, key = _bank_creds()
+    url = url.rstrip("/")
     return httpx.Client(
         base_url=url,
         headers={"X-API-Key": key},
@@ -34,7 +49,16 @@ def _client() -> httpx.Client:
     )
 
 
-def _err(msg: str) -> dict:
+def _err(msg) -> dict:
+    resp = getattr(msg, "response", None)
+    detail = ""
+    if resp is not None:
+        try:
+            detail = f" | {resp.status_code}: {resp.text[:600]}"
+        except Exception:
+            pass
+    if isinstance(msg, Exception):
+        return {"ok": False, "error": f"{type(msg).__name__}: {msg}{detail}"}
     return {"ok": False, "error": str(msg)}
 
 
@@ -42,7 +66,7 @@ def _err(msg: str) -> dict:
 # Tool 1 — place_partial_hold
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def place_partial_hold(
     customer_id: str,
     txn_id: str,
@@ -106,7 +130,7 @@ def place_partial_hold(
 # Tool 2 — release_hold
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def release_hold(
     hold_id: str,
     authorization_id: str,
@@ -158,7 +182,7 @@ def release_hold(
 # Tool 3 — open_case
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def open_case(
     customer_id: str,
     txn_id: str,
@@ -216,7 +240,7 @@ def open_case(
 # Tool 4 — update_case
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def update_case(
     case_id: str,
     step: str,
@@ -264,7 +288,7 @@ def update_case(
 # Tool 5 — queue_analyst
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def queue_analyst(case_id: str, context_summary: str) -> dict:
     """Escalate a case to the analyst queue and update the case status.
 

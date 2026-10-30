@@ -20,6 +20,21 @@ from typing import Optional
 import httpx
 from ibm_watsonx_orchestrate.agent_builder.tools import tool
 
+from ibm_watsonx_orchestrate.agent_builder.connections import ConnectionType
+from ibm_watsonx_orchestrate.run import connections
+
+_BANK_APP_ID = "novamind_mock_bank"
+_BANK_CREDS = [{"app_id": _BANK_APP_ID, "type": ConnectionType.KEY_VALUE}]
+
+
+def _bank_creds() -> tuple[str, str]:
+    """(url, key) from the Orchestrate connection; env vars for local runs."""
+    try:
+        c = connections.key_value(_BANK_APP_ID)
+        return c["MOCK_BANK_URL"], c["MOCK_BANK_API_KEY"]
+    except Exception:
+        return os.environ["MOCK_BANK_URL"], os.environ["MOCK_BANK_API_KEY"]
+
 from scoring import score_risk as _score_risk_impl  # single source of truth
 
 # ---------------------------------------------------------------------------
@@ -27,8 +42,8 @@ from scoring import score_risk as _score_risk_impl  # single source of truth
 # ---------------------------------------------------------------------------
 
 def _client() -> httpx.Client:
-    url = os.environ["MOCK_BANK_URL"].rstrip("/")
-    key = os.environ["MOCK_BANK_API_KEY"]
+    url, key = _bank_creds()
+    url = url.rstrip("/")
     return httpx.Client(
         base_url=url,
         headers={"X-API-Key": key},
@@ -36,7 +51,25 @@ def _client() -> httpx.Client:
     )
 
 
-def _err(msg: str) -> dict:
+def _norm_txn(t: dict) -> dict:
+    """LLMs often turn "5411" into the number 5411; the bank expects text ids/codes."""
+    t = dict(t or {})
+    for k in ("mcc", "txn_id", "customer_id", "account_id", "card_id", "merchant_id", "terminal_id"):
+        if t.get(k) is not None:
+            t[k] = str(t[k])
+    return t
+
+
+def _err(msg) -> dict:
+    resp = getattr(msg, "response", None)
+    detail = ""
+    if resp is not None:
+        try:
+            detail = f" | {resp.status_code}: {resp.text[:600]}"
+        except Exception:
+            pass
+    if isinstance(msg, Exception):
+        return {"ok": False, "error": f"{type(msg).__name__}: {msg}{detail}"}
     return {"ok": False, "error": str(msg)}
 
 
@@ -44,7 +77,7 @@ def _err(msg: str) -> dict:
 # Tool 1 — get_score_context
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def get_score_context(transaction: dict) -> dict:
     """Fetch scoring context for a candidate transaction from the mock bank.
 
@@ -67,7 +100,7 @@ def get_score_context(transaction: dict) -> dict:
     """
     try:
         with _client() as c:
-            r = c.post("/transactions/score-context", json=transaction)
+            r = c.post("/transactions/score-context", json=_norm_txn(transaction))
         r.raise_for_status()
         return {"ok": True, **r.json()}
     except Exception as exc:
@@ -78,7 +111,7 @@ def get_score_context(transaction: dict) -> dict:
 # Tool 2 — score_risk  (deterministic Python, delegated to scoring.py)
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def score_risk(
     signals: list,
     thin_baseline: bool,
@@ -125,7 +158,7 @@ def score_risk(
 # Tool 3 — record_risk_decision
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def record_risk_decision(
     customer_id: str,
     txn_id: str,

@@ -23,6 +23,21 @@ from datetime import datetime
 import httpx
 from ibm_watsonx_orchestrate.agent_builder.tools import tool
 
+from ibm_watsonx_orchestrate.agent_builder.connections import ConnectionType
+from ibm_watsonx_orchestrate.run import connections
+
+_BANK_APP_ID = "novamind_mock_bank"
+_BANK_CREDS = [{"app_id": _BANK_APP_ID, "type": ConnectionType.KEY_VALUE}]
+
+
+def _bank_creds() -> tuple[str, str]:
+    """(url, key) from the Orchestrate connection; env vars for local runs."""
+    try:
+        c = connections.key_value(_BANK_APP_ID)
+        return c["MOCK_BANK_URL"], c["MOCK_BANK_API_KEY"]
+    except Exception:
+        return os.environ["MOCK_BANK_URL"], os.environ["MOCK_BANK_API_KEY"]
+
 from scoring import SIGNAL_WEIGHTS  # single source of truth for signal weights
 
 # ---------------------------------------------------------------------------
@@ -30,8 +45,8 @@ from scoring import SIGNAL_WEIGHTS  # single source of truth for signal weights
 # ---------------------------------------------------------------------------
 
 def _client() -> httpx.Client:
-    url = os.environ["MOCK_BANK_URL"].rstrip("/")
-    key = os.environ["MOCK_BANK_API_KEY"]
+    url, key = _bank_creds()
+    url = url.rstrip("/")
     return httpx.Client(
         base_url=url,
         headers={"X-API-Key": key},
@@ -39,7 +54,16 @@ def _client() -> httpx.Client:
     )
 
 
-def _err(msg: str) -> dict:
+def _err(msg) -> dict:
+    resp = getattr(msg, "response", None)
+    detail = ""
+    if resp is not None:
+        try:
+            detail = f" | {resp.status_code}: {resp.text[:600]}"
+        except Exception:
+            pass
+    if isinstance(msg, Exception):
+        return {"ok": False, "error": f"{type(msg).__name__}: {msg}{detail}"}
     return {"ok": False, "error": str(msg)}
 
 
@@ -47,7 +71,18 @@ def _err(msg: str) -> dict:
 # Tool 1 — get_transaction_history
 # ---------------------------------------------------------------------------
 
-@tool
+def _fetch_history(customer_id: str, days: int = 180) -> dict:
+    """Plain helper (not a tool) so other tools can reuse the history fetch."""
+    try:
+        with _client() as c:
+            r = c.get(f"/customers/{customer_id}/transactions", params={"days": days})
+        r.raise_for_status()
+        return {"ok": True, "transactions": r.json()}
+    except Exception as exc:
+        return _err(exc)
+
+
+@tool(expected_credentials=_BANK_CREDS)
 def get_transaction_history(customer_id: str, days: int = 180) -> dict:
     """Fetch the customer's recent transaction history from the mock bank.
 
@@ -63,21 +98,15 @@ def get_transaction_history(customer_id: str, days: int = 180) -> dict:
         {"ok": true, "transactions": [...]} on success, or
         {"ok": false, "error": "..."} on failure.
     """
-    try:
-        with _client() as c:
-            r = c.get(f"/customers/{customer_id}/transactions", params={"days": days})
-        r.raise_for_status()
-        return {"ok": True, "transactions": r.json()}
-    except Exception as exc:
-        return _err(exc)
+    return _fetch_history(customer_id, days)
 
 
 # ---------------------------------------------------------------------------
 # Tool 2 — compute_baseline  (deterministic Python)
 # ---------------------------------------------------------------------------
 
-@tool
-def compute_baseline(customer_id: str) -> dict:
+@tool(expected_credentials=_BANK_CREDS)
+def compute_baseline(customer_id: str, force: bool = False) -> dict:
     """Build and save a statistical spending baseline for the customer.
 
     Fetches up to 180 days of history, then computes — in plain Python, with
@@ -98,13 +127,26 @@ def compute_baseline(customer_id: str) -> dict:
 
     Args:
         customer_id: The customer identifier, e.g. "C-DANA-001".
+        force: Rebuild even if a baseline is already stored (default false).
 
     Returns:
         {"ok": true, "baseline": {...}} on success, or
         {"ok": false, "error": "..."} on failure.
     """
+    # Reuse the stored baseline unless forced: the candidate transaction is
+    # already saved in history by now and must not teach the baseline.
+    if not force:
+        try:
+            with _client() as c:
+                br = c.get(f"/customers/{customer_id}/baseline")
+            br.raise_for_status()
+            existing = br.json().get("data") or {}
+            if existing.get("known_merchants"):
+                return {"ok": True, "baseline": existing, "cached": True}
+        except Exception:
+            pass
     # --- fetch history ---
-    hist = get_transaction_history(customer_id, days=180)
+    hist = _fetch_history(customer_id, days=180)
     if not hist.get("ok"):
         return hist
     txns = hist["transactions"]
@@ -226,7 +268,7 @@ def compute_baseline(customer_id: str) -> dict:
 # Tool 3 — compare_to_baseline  (deterministic Python)
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
     """Compare a candidate transaction against the customer's saved baseline.
 
@@ -330,7 +372,7 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
 # Tool 4 — learn_merchant
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def learn_merchant(
     customer_id: str,
     merchant_id: str,

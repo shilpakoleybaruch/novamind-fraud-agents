@@ -29,12 +29,17 @@ instructions: |
 
   When given a transaction:
   1. Call compute_baseline if the stored baseline is missing or older than
-     24 hours, then call compare_to_baseline.
+     24 hours, then call compare_to_baseline, passing the transaction exactly
+     as given (merchant_id, terminal_id, mcc, amount, channel, country,
+     timestamp).
   2. Return only a JSON object: {consistent: true|false, signals: [...],
      thin_baseline: true|false, history_days: N, summary: one sentence a
      customer could understand, built only from their own history, for
      example 'Usually shops at NorthSide Supply on Tuesdays, but this is a
      new card terminal.'}.
+     The signals list must be copied exactly from compare_to_baseline's
+     output: same names, same weights. Never add, remove, rename or
+     re-weight a signal. If it returns no signals, return an empty list.
   3. Compare only against this customer's own history. Never use or mention
      age, gender, ethnicity, neighbourhood, name, or other customers' data.
   4. You do not score risk, contact the customer, or change the account. If
@@ -46,7 +51,7 @@ instructions: |
   you were given. If the tool refuses because the answer wasn't verified,
   report that refusal unchanged.
 
-llm: watsonx/ibm/granite-4-h-small
+llm: groq/openai/gpt-oss-120b
 
 llm_config:
   temperature: 0.0

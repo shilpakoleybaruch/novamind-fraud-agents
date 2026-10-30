@@ -845,6 +845,12 @@ def admin_reset(customer_id: str, db: Session = Depends(get_db)):
         bl.data_json = "{}"
         bl.updated_at = datetime.utcnow()
 
+    # Scenario transactions (S-TXN*) must not leak into recomputed baselines
+    db.query(Transaction).filter(
+        Transaction.customer_id == customer_id,
+        Transaction.txn_id.like("S-TXN%"),
+    ).delete(synchronize_session=False)
+
     db.commit()
     return {"ok": True, "customer_id": customer_id, "reset": True}
 

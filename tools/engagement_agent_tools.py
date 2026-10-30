@@ -21,13 +21,28 @@ import os
 import httpx
 from ibm_watsonx_orchestrate.agent_builder.tools import tool
 
+from ibm_watsonx_orchestrate.agent_builder.connections import ConnectionType
+from ibm_watsonx_orchestrate.run import connections
+
+_BANK_APP_ID = "novamind_mock_bank"
+_BANK_CREDS = [{"app_id": _BANK_APP_ID, "type": ConnectionType.KEY_VALUE}]
+
+
+def _bank_creds() -> tuple[str, str]:
+    """(url, key) from the Orchestrate connection; env vars for local runs."""
+    try:
+        c = connections.key_value(_BANK_APP_ID)
+        return c["MOCK_BANK_URL"], c["MOCK_BANK_API_KEY"]
+    except Exception:
+        return os.environ["MOCK_BANK_URL"], os.environ["MOCK_BANK_API_KEY"]
+
 # ---------------------------------------------------------------------------
 # Connection helpers
 # ---------------------------------------------------------------------------
 
 def _client() -> httpx.Client:
-    url = os.environ["MOCK_BANK_URL"].rstrip("/")
-    key = os.environ["MOCK_BANK_API_KEY"]
+    url, key = _bank_creds()
+    url = url.rstrip("/")
     return httpx.Client(
         base_url=url,
         headers={"X-API-Key": key},
@@ -35,7 +50,16 @@ def _client() -> httpx.Client:
     )
 
 
-def _err(msg: str) -> dict:
+def _err(msg) -> dict:
+    resp = getattr(msg, "response", None)
+    detail = ""
+    if resp is not None:
+        try:
+            detail = f" | {resp.status_code}: {resp.text[:600]}"
+        except Exception:
+            pass
+    if isinstance(msg, Exception):
+        return {"ok": False, "error": f"{type(msg).__name__}: {msg}{detail}"}
     return {"ok": False, "error": str(msg)}
 
 
@@ -43,7 +67,7 @@ def _err(msg: str) -> dict:
 # Tool 1 — send_in_app_question
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def send_in_app_question(
     customer_id: str,
     txn_id: str,
@@ -111,7 +135,7 @@ def send_in_app_question(
 # Tool 2 — get_question_status
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def get_question_status(question_id: str) -> dict:
     """Check whether Dana has answered the in-app question yet.
 
@@ -160,7 +184,7 @@ def get_question_status(question_id: str) -> dict:
 # Tool 3 — retry_second_channel
 # ---------------------------------------------------------------------------
 
-@tool
+@tool(expected_credentials=_BANK_CREDS)
 def retry_second_channel(question_id: str) -> dict:
     """Trigger a simulated push-notification retry for an unanswered question.
 

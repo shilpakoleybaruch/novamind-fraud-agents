@@ -8,3 +8,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 .DS_Store
+
+data/*.db-shm
+data/*.db-wal
+data/mock_bank.db

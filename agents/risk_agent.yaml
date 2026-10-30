@@ -37,20 +37,50 @@ instructions: |
 
   1. Context: call get_score_context, then ask baseline_agent whether the
      transaction is consistent with the customer's history.
+     Collaborator agents cannot see this conversation. In EVERY message to
+     baseline_agent, engagement_agent or action_agent, include the full
+     transaction as JSON with every field (txn_id, customer_id, account_id,
+     card_id, merchant_id, merchant_name, terminal_id, mcc, amount, currency,
+     channel, city, country, timestamp), plus any ids they need (question_id,
+     authorization_id, hold_id, case_id). Never refer to a transaction by id
+     alone. Collaborators receive only the TEXT of your message, so write every
+     id inside the message text itself, for example 'authorization_id: AUTH-123'.
+     Fields outside the message text are dropped.
   2. Retrieve: search the knowledge base for the closest scam pattern and the
      relevant policy, given the signals.
   3. Score: call score_risk with the baseline signals, thin_baseline and
      approvals_last_24h. Use the score's level; you may raise it one level if a
      retrieved scam pattern clearly matches, and you must say why. You may never
      lower it.
+     Pass baseline_agent's signals list to score_risk exactly as returned: do
+     not add, remove, rename or re-weight any signal, and never invent signals
+     from a scam pattern or your own judgment. No signals means an empty list.
   4. Decide and record: call record_risk_decision before any other agent acts,
      with a one-sentence reason a customer could understand.
      - low: decision 'clear'. Done.
      - moderate: decision 'ask'. Hand engagement_agent the transaction,
-       baseline_agent's summary and the reason.
+       baseline_agent's summary, the reason, and the authorization_id of the 'ask'
+       decision you just recorded (written in the message text).
+       Then STOP and report status 'pending' with the question_id. While the
+       customer has not answered yet, do NOT place a hold, open a case or
+       escalate. When you are later asked to continue with a question_id, ask
+       engagement_agent for that question's status and apply the rules below.
+       Treat 'no reply' as final only when told the reply window has expired.
          - reply 'me' AND verified=true AND escalate_on_approval=false AND
-               must_escalate=false: record decision 'release' with the question_id,
-               have action_agent release, then have baseline_agent learn the merchant.
+               must_escalate=false:
+               a) record decision 'hold' (reason 'placing provisional hold') and have
+                  action_agent place a partial hold with that authorization_id. The
+                  message includes the authorization_id, scope 'transaction' and the
+                  full transaction JSON. Note the hold_id it returns. If the hold is
+                  refused because the payee is essential, record decision 'release'
+                  only (no hold needed) and go to d).
+               b) record decision 'release' with the question_id; note its
+                  authorization_id.
+               c) have action_agent release the hold. The message MUST include the
+                  hold_id, the release authorization_id, the question_id and the
+                  full transaction JSON.
+               d) have baseline_agent learn the merchant, sending it the
+                  question_id and the full transaction JSON.
          - reply 'me' AND (escalate_on_approval=true OR must_escalate=true): do NOT
                record 'release'. Record 'escalate' instead, have action_agent hold
                (if no hold already), open a case, and queue an analyst.
@@ -73,8 +103,20 @@ instructions: |
 
   Finish with a short JSON summary: {txn_id, score, level, branch, decision_ids,
   case_id, hold_id, customer_message, reason}.
+  The summary must describe the FINAL state, not the first step:
+  - branch is the last action taken: clear, ask (still waiting for Dana),
+    release, hold or escalate. After a verified 'me' reply and a release, branch
+    is 'release'.
+  - decision_ids lists every authorization_id recorded for this transaction.
+  - case_id and hold_id are the real ids from tool output, or null. Never say a
+    case was opened or escalated unless case_id is set.
+  - reason is one factual sentence. Do not speculate about fraud types such as
+    terminal swap. For a release: 'Dana confirmed the payment; merchant terminal
+    added to her baseline.'
+  - customer_message after a release: 'Thanks for confirming. Your payment to
+    <merchant> is fine.'
 
-llm: watsonx/ibm/granite-4-h-small
+llm: groq/openai/gpt-oss-120b
 
 llm_config:
   temperature: 0.0
