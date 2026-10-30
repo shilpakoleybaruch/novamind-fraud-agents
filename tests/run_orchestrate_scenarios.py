@@ -7,7 +7,7 @@ import urllib.error, urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 TURN_TIMEOUT = 240
-EXPECTED = {"S1": ["clear"], "S2": ["release"], "S5": ["release", "release", "escalate"], "S8": ["escalate"]}
+EXPECTED = {"S1": ["clear"], "S2": ["release"], "S3": ["escalate"], "S4": ["escalate"], "S5": ["release", "release", "escalate"], "S6": ["escalate"], "S7": ["release"], "S8": ["escalate"]}
 os.environ["COLUMNS"] = "220"
 T_ASSESS, T_CONT, T_TOTAL = 45, 60, 150  # target seconds
 
@@ -121,22 +121,32 @@ def run_txn(txn, reply, verified, reply_text):
         t = agent_text(ch.first)
         res = parse(t)
         res["t_assess"] = t_assess
-        if (res["branch"] == "ask" or (res["branch"] is None and (find_qid(t) or "pending" in t.lower()))) and reply:
+        needs_qid = (res["branch"] == "ask" or
+                     (res["branch"] is None and (find_qid(t) or "pending" in t.lower())))
+        if needs_qid and reply:
             qid = find_qid(t)
             if not qid:
                 qid = find_qid(agent_text(ch.say("What is the question_id you sent to Dana for %s? Reply with only the id." % txn["txn_id"])))
             if not qid:
                 res["note"] = "no question_id"
                 return res
-            body = {"reply": reply, "verified": bool(verified), "channel": "in_app"}
-            if reply_text:
-                body["reply_text"] = reply_text
-            code, out = bank("POST", "/questions/%s/simulate-reply" % qid, body)
-            if code >= 300:
-                res["note"] = "simulate-reply %s %s" % (code, out[:120])
-                return res
-            cont = ("Dana has answered question %s (reply: %s, verified). Please continue." % (qid, reply)
-                    if verified else "Dana has answered question %s. Please continue." % qid)
+            if reply == "none":
+                # S6 no-reply path: expire the question, then ask the agent to continue
+                code, out = bank("POST", "/questions/%s/simulate-expire" % qid, {})
+                if code >= 300:
+                    res["note"] = "simulate-expire %s %s" % (code, out[:120])
+                    return res
+                cont = "Question %s has expired with no reply. Please continue." % qid
+            else:
+                body = {"reply": reply, "verified": bool(verified), "channel": "in_app"}
+                if reply_text:
+                    body["reply_text"] = reply_text
+                code, out = bank("POST", "/questions/%s/simulate-reply" % qid, body)
+                if code >= 300:
+                    res["note"] = "simulate-reply %s %s" % (code, out[:120])
+                    return res
+                cont = ("Dana has answered question %s (reply: %s, verified). Please continue." % (qid, reply)
+                        if verified else "Dana has answered question %s. Please continue." % qid)
             t1 = time.time()
             res = parse(agent_text(ch.say(cont)))
             res["qid"] = qid
@@ -223,6 +233,10 @@ def main():
         b.close()
         if '"ok": true' not in btxt:
             print("WARNING baseline reply:", btxt[:200], flush=True)
+        # S7: override baseline metadata to simulate thin history (history_days=21, count=18)
+        if sid == "S7":
+            code, out = bank("POST", "/admin/set-thin-baseline/C-DANA-001", {})
+            print("  set-thin-baseline:", code, out[:120], flush=True)
         txns = s.get("transactions") or [s.get("transaction")]
         for i, txn in enumerate(txns):
             print("--- %s %s" % (sid, txn["txn_id"]), flush=True)

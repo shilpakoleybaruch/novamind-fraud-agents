@@ -498,6 +498,28 @@ def simulate_reply(question_id: str, body: SimulateReplyIn, db: Session = Depend
     return _question_dict(q)
 
 
+@app.post("/questions/{question_id}/simulate-expire", dependencies=[Depends(require_api_key)])
+def simulate_expire(question_id: str, db: Session = Depends(get_db)):
+    """Test-only: mark a pending question as expired (no reply within 15 min).
+
+    Only active when ENABLE_TEST_ENDPOINTS=true. Returns 404 otherwise.
+    Sets status='expired' without setting reply or verified, so the engagement
+    agent's retry_second_channel path triggers correctly (S6).
+    """
+    if os.environ.get("ENABLE_TEST_ENDPOINTS", "").lower() != "true":
+        raise HTTPException(404, "Not found")
+    q = db.query(Question).filter(Question.question_id == question_id).first()
+    if not q:
+        raise HTTPException(404, "Question not found")
+    if q.status != "pending":
+        raise HTTPException(409, f"Question status is '{q.status}', cannot expire")
+    q.status = "expired"
+    db.commit()
+    audit(db, "scenario_runner", "simulate_expire",
+          {"question_id": question_id}, "expired", txn_id=q.txn_id)
+    return {"question_id": question_id, "status": "expired"}
+
+
 # ---------------------------------------------------------------------------
 # Holds  (GUARDRAIL-CRITICAL)
 # ---------------------------------------------------------------------------
@@ -853,6 +875,38 @@ def admin_reset(customer_id: str, db: Session = Depends(get_db)):
 
     db.commit()
     return {"ok": True, "customer_id": customer_id, "reset": True}
+
+
+@app.post("/admin/set-thin-baseline/{customer_id}", dependencies=[Depends(require_api_key)])
+def admin_set_thin_baseline(customer_id: str, db: Session = Depends(get_db)):
+    """Test-only: override baseline metadata to simulate a thin baseline (S7).
+
+    Only available when ENABLE_TEST_ENDPOINTS=true.  Returns 404 otherwise.
+
+    Sets history_days=21, transaction_count=18 on the stored baseline so that
+    compare_to_baseline returns thin_baseline=True and score_risk uses the lower
+    ask threshold (20 instead of 30). The baseline signal data (known_merchants,
+    known_terminals, amounts, etc.) is preserved so signals still fire correctly.
+    Restored by a subsequent call to /admin/reset/{customer_id}.
+    """
+    if os.environ.get("ENABLE_TEST_ENDPOINTS", "").lower() != "true":
+        raise HTTPException(404, "Not found")
+    bl = db.query(Baseline).filter(Baseline.customer_id == customer_id).first()
+    if not bl:
+        raise HTTPException(404, "Baseline not found — run compute_baseline first")
+    # Patch the metadata fields; leave data_json (signal content) intact
+    bl.history_days = 21
+    bl.transaction_count = 18
+    # Also patch thin_baseline=True inside the data blob so compare_to_baseline reads it
+    data = bl.data
+    data["thin_baseline"] = True
+    data["history_days"] = 21
+    data["transaction_count"] = 18
+    bl.data_json = json.dumps(data)
+    bl.updated_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "customer_id": customer_id,
+            "history_days": 21, "transaction_count": 18, "thin_baseline": True}
 
 
 # ---------------------------------------------------------------------------

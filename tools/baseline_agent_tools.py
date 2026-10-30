@@ -336,8 +336,8 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
     own_id = str(transaction.get("txn_id") or "")
     if own_id:
         h = _fetch_history(customer_id, days=180)
-        if h.get("ok"):
-            others = [t for t in h["transactions"] if str(t.get("txn_id") or "") != own_id]
+        if h.get("ok") and isinstance(h.get("transactions"), list):
+            others = [t for t in h["transactions"] if isinstance(t, dict) and str(t.get("txn_id") or "") != own_id]
             o_mids = {str(t.get("merchant_id") or "") for t in others}
             o_terms = {(str(t.get("merchant_id") or ""), str(t.get("terminal_id") or "")) for t in others}
             o_mccs = {str(t.get("mcc") or "") for t in others}

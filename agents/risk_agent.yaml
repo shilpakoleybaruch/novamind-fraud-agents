@@ -69,7 +69,11 @@ instructions: |
        placeholder such as Q-001. If the reply has no real id, ask
        engagement_agent again for the question_id of this txn_id. The pending
        reply must be the full JSON: status 'pending', branch 'ask', txn_id,
-       score, level, question_id, decision_ids, customer_message null. While the customer has
+       score, level, question_id, decision_ids, customer_message null.
+        Never reply with branch 'ask' unless question_id is in the reply. When
+        a message says Dana has answered a question, finish the decision in that
+        same turn (release or escalate). Never return status 'answered' as your
+        final reply. While the customer has
        not answered, do NOT hold, open a case or escalate. When later asked to
        continue with a question_id, ask engagement_agent for that question's
        status, then:
