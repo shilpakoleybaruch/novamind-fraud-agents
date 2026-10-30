@@ -57,6 +57,9 @@ def _err(msg) -> dict:
             detail = f" | {resp.status_code}: {resp.text[:600]}"
         except Exception:
             pass
+    if resp is not None and getattr(resp, "status_code", None) == 403 and "essential" in (getattr(resp, "text", "") or "").lower():
+        return {"ok": True, "hold_placed": False, "essential_payee": True,
+                "note": "ESSENTIAL_PAYEE: the bank never holds this payee, so no hold is needed. This is expected, not a failure."}
     if isinstance(msg, Exception):
         return {"ok": False, "error": f"{type(msg).__name__}: {msg}{detail}"}
     return {"ok": False, "error": str(msg)}
@@ -324,5 +327,125 @@ def queue_analyst(case_id: str, context_summary: str) -> dict:
         r2.raise_for_status()
         data = r2.json()
         return {"ok": True, "case_id": data["case_id"], "status": data["status"]}
+    except Exception as exc:
+        return _err(exc)
+
+
+# ---------------------------------------------------------------------------
+# Combined tools: one call does the whole sequence (fewer LLM steps)
+# ---------------------------------------------------------------------------
+
+def _hold_attempt(c, customer_id, txn_id, authorization_id, reason):
+    """Try to place a partial hold. Never raises; returns a small dict."""
+    try:
+        r = c.post("/holds", json={"customer_id": customer_id, "txn_id": txn_id,
+                                   "authorization_id": authorization_id,
+                                   "scope": "transaction", "reason": reason})
+    except Exception as exc:
+        return {"hold_placed": False, "hold_error": f"{type(exc).__name__}: {exc}"}
+    if r.status_code in (200, 201):
+        return {"hold_placed": True, "hold_id": r.json()["hold_id"]}
+    if r.status_code == 403 and "essential" in r.text.lower():
+        return {"hold_placed": False, "essential_payee": True}
+    return {"hold_placed": False, "hold_error": f"{r.status_code}: {r.text[:300]}"}
+
+
+@tool(expected_credentials=_BANK_CREDS)
+def escalate_transaction(
+    customer_id: str,
+    txn_id: str,
+    authorization_id: str,
+    summary: str,
+) -> dict:
+    """Escalate a transaction in ONE call: place a partial hold (when the bank
+    allows it), open a case and queue the analyst.
+
+    A refused hold for an essential payee is expected and does not stop the
+    case from being opened.
+
+    Args:
+        customer_id: The affected customer.
+        txn_id: The transaction under review.
+        authorization_id: The risk_agent authorization_id of the escalate
+            (or hold) decision.
+        summary: One plain sentence for the analyst.
+
+    Returns:
+        {"ok": true, "action": "escalated", "hold_placed": bool, "hold_id": ...,
+         "case_id": "CASE-...", "case_status": "analyst_queued"} or
+        {"ok": false, "error": "..."}.
+    """
+    try:
+        with _client() as c:
+            out = {"ok": True, "action": "escalated"}
+            out.update(_hold_attempt(c, customer_id, txn_id, authorization_id,
+                                     "Escalated for analyst review"))
+            body = {"customer_id": customer_id, "txn_id": txn_id,
+                    "authorization_id": authorization_id, "summary": summary}
+            if out.get("hold_id"):
+                body["hold_id"] = out["hold_id"]
+            r = c.post("/cases", json=body)
+            r.raise_for_status()
+            case = r.json()
+            out["case_id"] = case["case_id"]
+            out["case_url"] = case.get("case_url")
+            r1 = c.patch(f"/cases/{case['case_id']}",
+                         json={"summary": f"[action_agent] escalated: {summary}"})
+            r1.raise_for_status()
+            r2 = c.post(f"/cases/{case['case_id']}/analyst-queue")
+            r2.raise_for_status()
+            out["case_status"] = r2.json().get("status")
+            return out
+    except Exception as exc:
+        return _err(exc)
+
+
+@tool(expected_credentials=_BANK_CREDS)
+def release_transaction(
+    customer_id: str,
+    txn_id: str,
+    hold_authorization_id: str,
+    release_authorization_id: str,
+    question_id: str,
+) -> dict:
+    """Release a transaction after Dana's verified 'me' reply, in ONE call:
+    place a provisional hold, then release it.
+
+    If the payee is essential the bank never holds it, so nothing needs
+    releasing and the result is ok true with essential_payee true. The bank
+    still enforces the release rules (verified reply, fewer than 3 approvals);
+    a refusal comes back as ok false.
+
+    Args:
+        customer_id: The affected customer.
+        txn_id: The transaction.
+        hold_authorization_id: authorization_id of the 'hold' decision.
+        release_authorization_id: authorization_id of the 'release' decision.
+        question_id: The in-app question Dana answered.
+
+    Returns:
+        {"ok": true, "action": "released" | "no_hold_needed", ...} or
+        {"ok": false, "action": "...", "error"/"refusal_reason": "..."}.
+    """
+    try:
+        with _client() as c:
+            h = _hold_attempt(c, customer_id, txn_id, hold_authorization_id,
+                              "Provisional hold pending release")
+            if h.get("essential_payee"):
+                return {"ok": True, "action": "no_hold_needed",
+                        "essential_payee": True, "hold_placed": False,
+                        "note": "Essential payee: never held, nothing to release."}
+            if not h.get("hold_placed"):
+                return {"ok": False, "action": "hold_failed",
+                        "error": h.get("hold_error", "hold failed")}
+            hold_id = h["hold_id"]
+            r = c.post(f"/holds/{hold_id}/release",
+                       json={"authorization_id": release_authorization_id,
+                             "actor": "action_agent"})
+            if r.status_code >= 400:
+                return {"ok": False, "action": "release_refused", "hold_id": hold_id,
+                        "refusal_reason": f"{r.status_code}: {r.text[:300]}"}
+            return {"ok": True, "action": "released", "hold_id": hold_id,
+                    "status": r.json().get("status")}
     except Exception as exc:
         return _err(exc)
