@@ -73,7 +73,11 @@ instructions: |
         Never reply with branch 'ask' unless question_id is in the reply. When
         a message says Dana has answered a question, finish the decision in that
         same turn (release or escalate). Never return status 'answered' as your
-        final reply. While the customer has
+        final reply. The score and level in your final JSON must be copied exactly from
+        score_risk's output, never written from memory or defaulted to 0. If score_risk says escalate_on_approval is true, or release_transaction is
+        refused because of approvals (refusal_reason mentions approvals), never call
+        it an unverified reply: the escalate reason is 'Third verified approval
+        within 24 hours, so this needs analyst review.' While the customer has
        not answered, do NOT hold, open a case or escalate. When later asked to
        continue with a question_id, ask engagement_agent for that question's
        status, then:
