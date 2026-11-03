@@ -994,11 +994,78 @@ async def question_page_submit(
     return HTMLResponse(_render_outcome(q, outcome, final))
 
 
+class ResolveIn(BaseModel):
+    outcome: str            # legitimate | fraud_confirmed
+    analyst: str = "analyst"
+    note: Optional[str] = None
+
+
+@app.post("/cases/{case_id}/resolve", dependencies=[Depends(require_api_key)])
+def resolve_case(case_id: str, body: ResolveIn, db: Session = Depends(get_db)):
+    """Analyst closes a case. legitimate -> hold released. fraud_confirmed -> hold stays, payment stays blocked."""
+    if body.outcome not in ("legitimate", "fraud_confirmed"):
+        raise HTTPException(400, "outcome must be 'legitimate' or 'fraud_confirmed'")
+    case = db.query(Case).filter(Case.case_id == case_id).first()
+    if not case:
+        raise HTTPException(404, "Case not found")
+    if case.status == "resolved":
+        return {"case_id": case_id, "status": "resolved", "already_resolved": True}
+
+    hold = None
+    if case.hold_id:
+        hold = db.query(Hold).filter(Hold.hold_id == case.hold_id).first()
+    if hold is None:
+        hold = (db.query(Hold).filter(Hold.txn_id == case.txn_id)
+                .order_by(Hold.created_at.desc()).first())
+
+    now = datetime.utcnow()
+    released = False
+    if body.outcome == "legitimate" and hold is not None and hold.status == "active":
+        hold.status = "released"
+        hold.released_at = now
+        hold.released_by = "analyst:" + body.analyst
+        released = True
+
+    if body.outcome == "legitimate":
+        case.summary = "Analyst confirmed the payment was legitimate. Hold released."
+        case.what_next = "Nothing further. The customer has been told."
+    else:
+        case.summary = "Analyst confirmed fraud. The payment stays blocked."
+        case.what_next = "Card should be replaced. The customer has been told."
+    case.status = "resolved"
+    case.resolved_at = now
+    case.updated_at = now
+    db.commit()
+
+    if released:
+        audit(db, "analyst", "hold_released",
+              {"hold_id": hold.hold_id, "analyst": body.analyst}, "released",
+              reason="Analyst confirmed the payment is legitimate.",
+              case_id=case_id, txn_id=case.txn_id)
+    audit(db, "analyst", "case_resolved",
+          {"case_id": case_id, "outcome": body.outcome, "analyst": body.analyst, "note": body.note},
+          "resolved",
+          reason=("Analyst: payment legitimate." if body.outcome == "legitimate"
+                  else "Analyst: fraud confirmed, payment stays blocked."),
+          case_id=case_id, txn_id=case.txn_id)
+    return {"case_id": case_id, "status": "resolved", "outcome": body.outcome,
+            "hold_released": released}
+
+
 def _dana_outcome(db: Session, q: Question):
     """What Dana sees. Built from what the bank has actually done, never from her tap alone.
     Returns (message, final). final=False means the page keeps refreshing."""
     case = (db.query(Case).filter(Case.txn_id == q.txn_id)
             .order_by(Case.created_at.desc()).first())
+    if case and case.status == "resolved":
+        h = (db.query(Hold).filter(Hold.txn_id == q.txn_id)
+             .order_by(Hold.created_at.desc()).first())
+        if h is not None and h.status == "released":
+            return ("Resolved. Our team confirmed this payment was yours. It went through and "
+                    "your card is unblocked. Your supplier payments and rent transfer are unaffected.", True)
+        return ("Resolved. Our team confirmed this charge was not yours. It stays blocked and you "
+                "will not be charged. Please replace your card. Your supplier payments and rent "
+                "transfer are unaffected.", True)
     if case:
         return ("Thank you. Our team is reviewing this charge (case %s). "
                 "Your supplier payments and rent transfer are unaffected." % case.case_id, True)
