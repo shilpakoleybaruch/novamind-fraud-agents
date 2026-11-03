@@ -861,6 +861,16 @@ def admin_reset(customer_id: str, db: Session = Depends(get_db)):
         RiskDecision.customer_id == customer_id
     ).delete(synchronize_session=False)
 
+    # Scenario leftovers created under a wrong customer id must not survive a reset
+    for model in (Hold, Case, Question, RiskDecision):
+        db.query(model).filter(model.txn_id.like("S-TXN%")).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.txn_id.like("S-TXN%")).delete(synchronize_session=False)
+
+    # Scenario leftovers created under a wrong customer id must not survive a reset
+    for model in (Hold, Case, Question, RiskDecision):
+        db.query(model).filter(model.txn_id.like("S-TXN%")).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.txn_id.like("S-TXN%")).delete(synchronize_session=False)
+
     # Reset baseline to empty stub (preserve row; tools will recompute)
     bl = db.query(Baseline).filter(Baseline.customer_id == customer_id).first()
     if bl:
@@ -927,11 +937,8 @@ def question_page(question_id: str, t: str = Query(...), db: Session = Depends(g
 
     # Check if answered — show outcome
     if q.status == "answered":
-        if q.reply == "me":
-            outcome = "Resolved. Your card is unblocked. This merchant is saved as a known supplier. Your supplier payments and rent transfer are unaffected."
-        else:
-            outcome = "Thank you. We've placed a partial hold on this charge only. Your supplier payments and rent transfer are unaffected. A case has been opened for review."
-        return HTMLResponse(_render_outcome(q, outcome))
+        outcome, final = _dana_outcome(db, q)
+        return HTMLResponse(_render_outcome(q, outcome, final))
 
     template = _load_template("dana_question.html")
     return HTMLResponse(_render_question(template, q))
@@ -968,12 +975,27 @@ async def question_page_submit(
           {"question_id": question_id, "reply": reply}, "answered",
           txn_id=q.txn_id)
 
-    if reply == "me":
-        outcome = "Resolved. Your card is unblocked. This merchant is saved as a known supplier. Your supplier payments and rent transfer are unaffected."
-    else:
-        outcome = "Thank you. We've placed a partial hold on this charge only. Your supplier payments and rent transfer are unaffected. A case has been opened for review."
+    outcome, final = _dana_outcome(db, q)
+    return HTMLResponse(_render_outcome(q, outcome, final))
 
-    return HTMLResponse(_render_outcome(q, outcome))
+
+def _dana_outcome(db: Session, q: Question):
+    """What Dana sees. Built from what the bank has actually done, never from her tap alone.
+    Returns (message, final). final=False means the page keeps refreshing."""
+    case = (db.query(Case).filter(Case.txn_id == q.txn_id)
+            .order_by(Case.created_at.desc()).first())
+    if case:
+        return ("Thank you. Our team is reviewing this charge (case %s). "
+                "Your supplier payments and rent transfer are unaffected." % case.case_id, True)
+    if q.reply == "me":
+        last = (db.query(RiskDecision).filter(RiskDecision.txn_id == q.txn_id)
+                .order_by(RiskDecision.created_at.desc()).first())
+        active = db.query(Hold).filter(Hold.txn_id == q.txn_id, Hold.status == "active").count()
+        if last is not None and last.decision == "release" and active == 0:
+            return ("Resolved. Your payment went through and your card is unblocked. "
+                    "Your supplier payments and rent transfer are unaffected.", True)
+        return ("Thanks. We are confirming this with the bank now. This page updates by itself.", False)
+    return ("Thank you. We are securing this charge now. This page updates by itself.", False)
 
 
 def _render_question(template: str, q: Question) -> str:
@@ -989,13 +1011,15 @@ def _render_question(template: str, q: Question) -> str:
     )
 
 
-def _render_outcome(q: Question, message: str) -> str:
+def _render_outcome(q: Question, message: str, final: bool = True) -> str:
+    refresh = "" if final else f'<meta http-equiv="refresh" content="4;url=/app/question/{q.question_id}?t={q.page_token}">'
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+{refresh}
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Card Alert — Resolved</title>
+<title>Card Alert</title>
 <style>
   body {{font-family: -apple-system,'Segoe UI',system-ui,sans-serif;background:#f7f8fa;
          margin:0;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}}
