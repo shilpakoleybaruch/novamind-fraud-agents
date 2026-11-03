@@ -76,7 +76,7 @@ Transaction → baseline check → risk score
 ## Tech Stack
 
 - **watsonx Orchestrate ADK** — Python tools with the `@tool` decorator, agent YAML specs, a knowledge base for RAG, deployed to cloud environment `mycloud`.
-- **LLM:** Granite model from watsonx.ai (fall back if tool-calling proves unreliable).
+- **LLM:** GPT-OSS 120B (groq/openai/gpt-oss-120b) for all four agents. Granite 3.3 and Granite 4 H Small were tried first and failed at tool-calling.
 - **Mock bank:** FastAPI + SQLite, Dockerfile, seed data, two HTML pages.
 - **ADK CLI:** `orchestrate` (package: `ibm-watsonx-orchestrate`, installed via `uv`).
 

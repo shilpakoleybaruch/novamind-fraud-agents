@@ -415,11 +415,26 @@ def create_question(body: QuestionIn, db: Session = Depends(get_db)):
     return {"question_id": qid, "page_url": page_url}
 
 
+def _expire_if_stale(db: Session, q: Question) -> Question:
+    """No reply within QUESTION_TTL_SECONDS (default 900 = 15 min) -> expired."""
+    ttl = int(os.environ.get("QUESTION_TTL_SECONDS", "900"))
+    if q.status == "pending" and (datetime.utcnow() - q.created_at).total_seconds() > ttl:
+        q.status = "expired"
+        q.second_channel_retried = True  # fixed step: one push on the second channel
+        db.commit()
+        audit(db, "bank", "question_expired", {"question_id": q.question_id, "ttl_seconds": ttl},
+              "expired", txn_id=q.txn_id)
+        audit(db, "bank", "question_retry_push", {"question_id": q.question_id, "channel": "push"},
+              "retried", txn_id=q.txn_id)
+    return q
+
+
 @app.get("/questions/{question_id}", dependencies=[Depends(require_api_key)])
 def get_question(question_id: str, db: Session = Depends(get_db)):
     q = db.query(Question).filter(Question.question_id == question_id).first()
     if not q:
         raise HTTPException(404, "Question not found")
+    q = _expire_if_stale(db, q)
     return _question_dict(q)
 
 

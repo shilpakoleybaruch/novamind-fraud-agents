@@ -125,7 +125,7 @@ ibmcloud ce project delete --name novamind          --force
 ```
 ## Known limitations of the local test runner
 - It tests the deterministic layer (scoring, baseline, API guardrails), not the
-  Granite agents. Agent behaviour is tested in the Orchestrate chat.
+  GPT-OSS 120B agents. Agent behaviour is tested in the Orchestrate chat.
 - Latency excludes LLM calls.
 - S2: a moderate transaction is pending while Dana is asked, so no hold exists
   and the release endpoint isn't called. The release guardrail is covered in
