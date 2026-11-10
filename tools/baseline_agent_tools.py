@@ -334,10 +334,23 @@ def compare_to_baseline(customer_id: str, transaction: dict) -> dict:
     # baseline only knows this merchant/terminal/category from this very
     # transaction, treat it as new.
     own_id = str(transaction.get("txn_id") or "")
-    if own_id:
+    own_ts = str(transaction.get("timestamp") or "").replace("T", " ")[:16]
+
+    def _is_own(t: dict) -> bool:
+        if own_id and str(t.get("txn_id") or "") == own_id:
+            return True
+        # Fallback when the caller did not pass txn_id: same merchant, amount and minute.
+        try:
+            return (str(t.get("merchant_id") or "") == mid
+                    and abs(float(t.get("amount") or 0) - amount) < 0.005
+                    and str(t.get("timestamp") or "").replace("T", " ")[:16] == own_ts)
+        except Exception:
+            return False
+
+    if mid:
         h = _fetch_history(customer_id, days=180)
         if h.get("ok") and isinstance(h.get("transactions"), list):
-            others = [t for t in h["transactions"] if isinstance(t, dict) and str(t.get("txn_id") or "") != own_id]
+            others = [t for t in h["transactions"] if isinstance(t, dict) and not _is_own(t)]
             o_mids = {str(t.get("merchant_id") or "") for t in others}
             o_terms = {(str(t.get("merchant_id") or ""), str(t.get("terminal_id") or "")) for t in others}
             o_mccs = {str(t.get("mcc") or "") for t in others}

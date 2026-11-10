@@ -12,3 +12,6 @@ __pycache__/
 data/*.db-shm
 data/*.db-wal
 data/mock_bank.db
+
+*.db.bak
+*.bak
